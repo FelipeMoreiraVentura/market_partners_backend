@@ -78,47 +78,43 @@ async def chat(payload: Chat):
 @app.post("/set_product")
 async def setProduct(payload: setProductProps):
     prompt = f'''
-                    Você é um gerador automático de dados de produto. Sua única função é gerar **apenas um JSON válido e formatado corretamente**, sem nenhum texto fora dele.
+Você é um gerador automático de dados de produto. Sua única função é gerar **apenas um JSON válido e formatado corretamente**, sem nenhum texto fora dele.
 
-                    ---
+---
 
-                    🔒 **INSTRUÇÕES IMPORTANTES (siga exatamente):**
-                    - NUNCA escreva nada fora do JSON.
-                    - NÃO escreva frases de introdução, explicações ou "JSON:" antes da resposta.
-                    - SUA RESPOSTA DEVE SER SOMENTE o JSON.
+🔒 **INSTRUÇÕES IMPORTANTES (siga exatamente):**
+- NUNCA escreva nada fora do JSON.
+- NÃO escreva frases de introdução, explicações ou "JSON:" antes da resposta.
+- SUA RESPOSTA DEVE SER SOMENTE o JSON.
 
-                    ---
+---
 
-                    📦 Dado o nome de um produto, gere o seguinte JSON com essas chaves:
+📦 Dado o nome de um produto, gere o seguinte JSON com essas chaves:
 
-                    - "name": um título curto, amigável e atrativo para o produto.
-                    - "description": uma descrição objetiva e clara sobre o que é o produto, como pode ser usado, e quais benefícios ele oferece.
+- "name": um título curto, amigável e atrativo para o produto.
+- "description": uma descrição objetiva e clara sobre o que é o produto, como pode ser usado, e quais benefícios ele oferece.
 
-                    **⚠️ Observações:**
-                    - Você **não conhece** a marca, material ou características exatas do produto.
-                    - Portanto, destaque pontos que o usuário precisará preencher depois (ex: tamanho, cor, modelo), e diga o que seria interessante ter no anúncio.
+---
 
-                    ---
+🎯 **Exemplo de formato correto (não escreva esse texto, apenas imite a estrutura):**
 
-                    🎯 **Exemplo de formato correto (não escreva esse texto, apenas imite a estrutura):**
+{{
+"name": "Fone de Ouvido Bluetooth",
+"description": "Ideal para quem busca praticidade no dia a dia. Informe aqui a duração da bateria, alcance do Bluetooth e recursos como microfone ou cancelamento de ruído."
+}}
 
-                    {{
-                    "name": "Fone de Ouvido Bluetooth",
-                    "description": "Ideal para quem busca praticidade no dia a dia. Informe aqui a duração da bateria, alcance do Bluetooth e recursos como microfone ou cancelamento de ruído."
-                    }}
+---
+**Se não entender o produto, devolva**
+{{
+"name": "Produto desconhecido",
+"description": "Não foi possível identificar o produto."
+}}
 
-                    ---
-                    **Se não entender o produto, devolva**
-                    {{
-                        "name": "Produto desconhecido",
-                        "description": "Não foi possível identificar o produto."
-                    }}
+---
 
-                    ---
+📌 Produto: {payload.product}
 
-                    📌 Produto: {payload.product}
-
-                    (Sua resposta começa na próxima linha. Lembre: apenas o JSON!)
+(Sua resposta começa na próxima linha. Lembre: apenas o JSON!)
 
             '''
             
