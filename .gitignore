@@ -1,2 +1,6 @@
-/env
-/.env
+env
+venv
+.env
+__pycache__
+
+firebase
