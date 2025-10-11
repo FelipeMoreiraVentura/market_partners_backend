@@ -33,15 +33,17 @@ def chatRoute(payload: Chat):
                 "- O modelo de detecção de imagens é simples: apenas identifica o item presente, sem características adicionais. "
                 "- Atualize SEMPRE o histórico de conversa recebido: pegue o histórico anterior, acrescente a nova pergunta do usuário e sua nova resposta. "
                 "- O histórico deve ser um resumo curto, objetivo e claro, sem opiniões ou frases desnecessárias. "
-                "- SEMPRE mantenha no histórico um campo de **características do produto** com as chaves: categoria, subcategoria, preço (se disponível) e produto. "
+                "- SEMPRE mantenha no histórico um campo de **características do produto** com as chaves: categoria, subcategoria, preço e produto. "
                 "- A categoria e a subcategoria devem ser atribuídas AUTOMATICAMENTE com base no produto que o usuário mencionar. "
-                "  Exemplo: se o usuário falar 'Redmi Note 8', então: {\"categoria\": \"Celulares\", \"subcategoria\": \"Smartphones\"}. "
-                "- Se o produto não tiver categoria ou subcategoria óbvias, escolha a mais adequada de forma genérica"
-                f"- Suas categorias disponíveis são: {categories}"
-                "- Se faltar preço ou informações de variação, pergunte de forma natural (ex: 'Qual faixa de preço você procura?'). "
-                "- Mantenha o fluxo de diagnóstico: se o usuário relata um problema, primeiro ajude a investigar (ex: cabos, bateria, carregador) antes de recomendar produtos. "
+                "  Exemplo: se o usuário falar 'cabo tipo C', então: {\"categoria\": \"Acessórios\", \"subcategoria\": \"Cabos USB\", \"preço\": \"20 reais\", \"produto\": \"Cabo tipo C\"}. "
+                "- Se não houver categoria ou subcategoria óbvias, escolha a mais adequada de forma genérica. "
+                f"- Suas categorias disponíveis são: {categories} "
+                "- Se faltar preço, pergunte de forma natural (ex: 'Qual faixa de preço você procura?'). "
+                "- Nunca deixe categoria, subcategoria, preço ou produto vazios: se não souber, preencha com valores genéricos (ex: categoria='Acessórios', subcategoria='Diversos', preço='não informado'). "
+                "- O valor de 'rag' deve ser 'y' sempre que houver produto, preço, categoria e subcategoria (mesmo preenchidos de forma genérica). "
+                "- Use 'rag': 'n' somente se realmente faltar alguma dessas quatro informações e não houver como inferir. "
                 "- Sua resposta deve ser **exclusivamente** um JSON válido neste formato: "
-                "{\"output\": \"texto da resposta\", \"history\": \"resumo atualizado da conversa\"} "
+                "{\"output\": \"texto da resposta\", \"history\": \"resumo atualizado da conversa\", \"rag\": \"y ou n\"} "
                 f"Histórico atual: {payload.history}"
             ),
         },
@@ -51,24 +53,6 @@ def chatRoute(payload: Chat):
         },
     ]
 
-    messageRag = [
-        {
-            "role": "system",
-            "content": (
-                "Você é um validador de informações do chatbot PartnersBot. "
-                "Seu trabalho é verificar se o histórico da conversa já contém informações suficientes para identificar um produto, "
-                "incluindo pelo menos: categoria, subcategoria, preço e o produto em si. "
-                "⚠️ Responda APENAS com um único caractere: "
-                "- 'y' se todas as informações estão presentes. "
-                "- 'n' se faltar qualquer uma delas. "
-                "Não escreva explicações, não justifique, não adicione nada além de 'y' ou 'n'."
-            ),
-        },
-        {
-            "role": "user",
-            "content": f"Histórico: {payload.history}",
-        },
-    ]
 
 
     menssageSourceProduct = [
@@ -89,16 +73,22 @@ def chatRoute(payload: Chat):
         },
     ]
 
-    validaHistorico = gpt(messageRag, 0)
 
-    if validaHistorico == 'n':
-        resposta = gpt(messageChat, 0.7)
-        return json.loads(resposta)
+    resposta = gpt(messageChat, 0.7)
+    resposta = json.loads(resposta)
+
+    print("RESPOSTA DO CHATBOT:", resposta)
+
+    if resposta.get("rag") == "n":
+        return {
+            "output": resposta.get("output"),
+            "history": resposta.get("history"),
+        }
 
     productInfo = gpt(menssageSourceProduct, 0)
 
     if not firebase_admin._apps:
-        cred = credentials.Certificate("app/firebase/market-partners-firebase-adminsdk-fbsvc-387eb0523e.json")
+        cred = credentials.Certificate("app/firebase/market-partners-firebase-adminsdk-fbsvc-618bf3bc04.json")
         firebase_admin.initialize_app(cred)
 
     db = firestore.client()
@@ -145,7 +135,7 @@ def chatRoute(payload: Chat):
         }
 
     return {
-        "output": "Com base no que conversamos, encontrei alguns produtos que podem te interessar!",
+        "output": resposta.get("output"),
         "history": payload.history,
         "products": resultados,
     }
