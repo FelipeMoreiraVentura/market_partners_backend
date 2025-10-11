@@ -5,7 +5,10 @@ from app.services.identify_image import identify_image
 from app.services.llm import gpt
 from app.services.categories import categories
 import firebase_admin
-from firebase_admin import credentials, firestore, auth, storage
+from firebase_admin import credentials, firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
+from rapidfuzz import fuzz
+
 
 
 def chatRoute(payload: Chat):
@@ -14,6 +17,7 @@ def chatRoute(payload: Chat):
         if payload.image
         else "usuario não mandou"
     )
+    
     messageChat = [
         {
             "role": "system",
@@ -23,25 +27,28 @@ def chatRoute(payload: Chat):
                 "Também auxilia vendedores, sugerindo títulos e descrições para anúncios a partir de imagens. "
                 "A empresa criadora é a Partners, especializada em implementar IAs em áreas pouco exploradas para gerar valor. "
                 "⚠️ Regras obrigatórias: "
-                "- Responda sempre de forma amigável e clara. "
+                "- Responda sempre de forma amigável e clara"
+                "- detecte o idioma da pessoa, e reponda o mesmo que o dela"
                 "- Não use quebras de linha (sem \\n). "
                 "- Nunca recomende ou cite concorrentes ou outros sites. "
                 "- Se o usuário fugir do contexto de produtos, desconverse e traga-o de volta ao assunto. "
                 "- Se houver imagem, ela estará indicada no final do prompt. "
-                "- Se a imagem for 'usuario não mandou', ignore-a. "
+                "- Se a imagem for 'usuario não mandou', ignore-a."
                 "- Recomendações de imagem para anúncios: produto centralizado, formato 1:1 (quadrado), fundo limpo/cor sólida, ambiente bem iluminado. "
                 "- O modelo de detecção de imagens é simples: apenas identifica o item presente, sem características adicionais. "
                 "- Atualize SEMPRE o histórico de conversa recebido: pegue o histórico anterior, acrescente a nova pergunta do usuário e sua nova resposta. "
                 "- O histórico deve ser um resumo curto, objetivo e claro, sem opiniões ou frases desnecessárias. "
-                "- SEMPRE mantenha no histórico um campo de **características do produto** com as chaves: categoria, subcategoria, preço (se disponível) e produto. "
+                "- SEMPRE mantenha no histórico um campo de **características do produto** com as chaves: categoria, subcategoria, preço e produto. "
                 "- A categoria e a subcategoria devem ser atribuídas AUTOMATICAMENTE com base no produto que o usuário mencionar. "
-                "  Exemplo: se o usuário falar 'Redmi Note 8', então: {\"categoria\": \"Celulares\", \"subcategoria\": \"Smartphones\"}. "
-                "- Se o produto não tiver categoria ou subcategoria óbvias, escolha a mais adequada de forma genérica"
-                f"- Suas categorias disponíveis são: {categories}"
-                "- Se faltar preço ou informações de variação, pergunte de forma natural (ex: 'Qual faixa de preço você procura?'). "
-                "- Mantenha o fluxo de diagnóstico: se o usuário relata um problema, primeiro ajude a investigar (ex: cabos, bateria, carregador) antes de recomendar produtos. "
+                "- Exemplo: se o usuário falar 'cabo tipo C', então: {\"categoria\": \"Acessórios\", \"subcategoria\": \"Cabos USB\", \"preço\": \"20 reais\", \"produto\": \"Cabo tipo C\"}. "
+                "- Se não houver categoria ou subcategoria óbvias, escolha a mais adequada de forma genérica. "
+                f"- Suas categorias disponíveis são: {categories} "
+                "- Se faltar preço, pergunte de forma natural (ex: 'Qual faixa de preço você procura?'). "
+                "- Nunca deixe categoria, subcategoria, preço ou produto vazios: se não souber, preencha com valores genéricos (ex: categoria='Acessórios', subcategoria='Diversos', preço='não informado'). "
+                "- O valor de 'rag' deve ser 'y' sempre que houver produto, preço, categoria e subcategoria (mesmo preenchidos de forma genérica). "
+                "- Use 'rag': 'n' somente se realmente faltar alguma dessas quatro informações e não houver como inferir. "
                 "- Sua resposta deve ser **exclusivamente** um JSON válido neste formato: "
-                "{\"output\": \"texto da resposta\", \"history\": \"resumo atualizado da conversa\"} "
+                "{\"output\": \"texto da resposta\", \"history\": \"resumo atualizado da conversa\", \"rag\": \"y ou n\"} "
                 f"Histórico atual: {payload.history}"
             ),
         },
@@ -51,24 +58,6 @@ def chatRoute(payload: Chat):
         },
     ]
 
-    messageRag = [
-        {
-            "role": "system",
-            "content": (
-                "Você é um validador de informações do chatbot PartnersBot. "
-                "Seu trabalho é verificar se o histórico da conversa já contém informações suficientes para identificar um produto, "
-                "incluindo pelo menos: categoria, subcategoria, preço e o produto em si. "
-                "⚠️ Responda APENAS com um único caractere: "
-                "- 'y' se todas as informações estão presentes. "
-                "- 'n' se faltar qualquer uma delas. "
-                "Não escreva explicações, não justifique, não adicione nada além de 'y' ou 'n'."
-            ),
-        },
-        {
-            "role": "user",
-            "content": f"Histórico: {payload.history}",
-        },
-    ]
 
 
     menssageSourceProduct = [
@@ -77,10 +66,10 @@ def chatRoute(payload: Chat):
             "content": (
                 "Você recebe um histórico de conversa de um chatbot de vendas"
                 " Sua função é criar um json de informações com o histórico"
+                " Tente criar elas com suas infromações, independente do jeito que elas vieram, se REALMENTE não der retorne em moreInfo oque precisa ter a mais, caso n precise retorne so n"
                 f"categorias presentes que podem ser usadas: {categories}"
-                "Formato obrigatório: "
-                "[{\"category\": \"categoria\", \"name\": \"nome do produto\", \"subCategory\": \"subcategoria\", \"price\": \"preço\"}, {...}] "
-                "⚠️ Não escreva nada além do JSON. "
+                "Formato obrigatório: {\"moreInfo\": \"informacoes extras\" ou \"n\", \"products\": [{\"category\": \"categoria\", \"name\": \"nome do produto\", \"subCategory\": \"subcategoria\", \"price\": \"preco\"}]}"
+                "⚠️ Responda apenas com um JSON válido, sem texto adicional, sem explicações e sem comentários."
             ),
         },
         {
@@ -89,13 +78,28 @@ def chatRoute(payload: Chat):
         },
     ]
 
-    validaHistorico = gpt(messageRag, 0)
 
-    if validaHistorico == 'n':
-        resposta = gpt(messageChat, 0.7)
-        return json.loads(resposta)
+    resposta = gpt(messageChat, 0.7)
+    resposta = json.loads(resposta)
+
+    print("RESPOSTA DO CHATBOT:", resposta)
+
+    if resposta.get("rag") == "n":
+        return {
+            "output": resposta.get("output"),
+            "history": resposta.get("history"),
+        }
 
     productInfo = gpt(menssageSourceProduct, 0)
+    product_json = json.loads(productInfo)
+
+    if product_json.get("moreInfo") != "n":
+        missing = product_json.get("moreInfo")
+        print(f"⚠️ Faltam informações: {missing}")
+        return {
+            "output": f"Entendi! Só preciso que você me diga o(a) {missing} para continuar a busca.",
+            "history": payload.history + f" Solicitei ao usuário o(a) {missing} pois estava faltando.",
+        }
 
     if not firebase_admin._apps:
         cred = credentials.Certificate("app/firebase/market-partners-firebase-adminsdk-fbsvc-387eb0523e.json")
@@ -104,27 +108,45 @@ def chatRoute(payload: Chat):
     db = firestore.client()
 
     try:
-        produtos = json.loads(productInfo)
+        produtos = product_json.get("products")
         resultados = []
 
         for prod in produtos:
-            query = (
-                db.collection("products")
-                .where("category", "==", prod["category"])
-                .where("subCategory", "==", prod["subCategory"])
-                .limit(3)
-                .stream()
+            nome_produto = prod.get("name", "").lower().strip()
+            encontrados = []
+
+            todos = db.collection("products").limit(100).stream()
+            lista_produtos = [{"id": doc.id, **doc.to_dict()} for doc in todos]
+
+            parecidos = sorted(
+                lista_produtos,
+                key=lambda x: fuzz.partial_ratio(nome_produto, x.get("name", "").lower()),
+                reverse=True,
             )
-            encontrados = [doc.to_dict() for doc in query]
+
+            encontrados = [
+                p for p in parecidos if fuzz.partial_ratio(nome_produto, p.get("name", "").lower()) > 60
+            ][:5]
+
+            if not encontrados:
+                query = (
+                    db.collection("products")
+                    .where(filter=FieldFilter("category", "==", prod["category"]))
+                    .where(filter=FieldFilter("subCategory", "==", prod["subCategory"]))
+                    .limit(3)
+                    .stream()
+                )
+                encontrados = [{"id": doc.id, **doc.to_dict()} for doc in query]
 
             if not encontrados:
                 query_sub = (
                     db.collection("products")
-                    .where("subCategory", "==", prod["subCategory"])
+                    .where(filter=FieldFilter("subCategory", "==", prod["subCategory"]))
                     .limit(3)
                     .stream()
                 )
-                encontrados = [doc.to_dict() for doc in query_sub]
+                encontrados = [{"id": doc.id, **doc.to_dict()} for doc in query_sub]
+
 
             if not encontrados:
                 query_recent = (
@@ -133,9 +155,13 @@ def chatRoute(payload: Chat):
                     .limit(3)
                     .stream()
                 )
-                encontrados = [doc.to_dict() for doc in query_recent]
+                encontrados = [{"id": doc.id, **doc.to_dict()} for doc in query_recent]
 
             resultados.extend(encontrados)
+
+        if not resultados:
+            print("Nenhum produto encontrado nas tentativas.")
+            resultados = []
 
     except Exception as e:
         print("Erro ao buscar produtos:", e)
@@ -145,7 +171,7 @@ def chatRoute(payload: Chat):
         }
 
     return {
-        "output": "Com base no que conversamos, encontrei alguns produtos que podem te interessar!",
+        "output": resposta.get("output"),
         "history": payload.history,
         "products": resultados,
     }

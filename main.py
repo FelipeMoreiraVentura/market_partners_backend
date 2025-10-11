@@ -1,7 +1,5 @@
 import base64
-from dotenv import load_dotenv
 from fastapi import FastAPI
-from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes.chat import chatRoute
 from app.routes.set_product import setProductRoute
