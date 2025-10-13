@@ -45,7 +45,8 @@ def chatRoute(payload: Chat):
                 f"- Suas categorias disponíveis são: {categories} "
                 "- Se faltar preço, pergunte de forma natural (ex: 'Qual faixa de preço você procura?'). "
                 "- Nunca deixe categoria, subcategoria, preço ou produto vazios: se não souber, preencha com valores genéricos (ex: categoria='Acessórios', subcategoria='Diversos', preço='não informado'). "
-                "- O valor de 'rag' deve ser 'y' sempre que houver produto, preço, categoria e subcategoria (mesmo preenchidos de forma genérica). "
+                "- O valor de 'rag' deve ser 'y' sempre que houver produto, preço, categoria e subcategoria. "
+                "- ajude o usuario caso ele não saiba direito oque esta procurando, antes de ja marcar o rag como y. Por exemplo se for um cabo, ver se é tipo c ou micro"
                 "- Use 'rag': 'n' somente se realmente faltar alguma dessas quatro informações e não houver como inferir. "
                 "- Sua resposta deve ser **exclusivamente** um JSON válido neste formato: "
                 "{\"output\": \"texto da resposta\", \"history\": \"resumo atualizado da conversa\", \"rag\": \"y ou n\"} "
@@ -66,7 +67,7 @@ def chatRoute(payload: Chat):
             "content": (
                 "Você recebe um histórico de conversa de um chatbot de vendas"
                 " Sua função é criar um json de informações com o histórico"
-                " Tente criar elas com suas infromações, independente do jeito que elas vieram, se REALMENTE não der retorne em moreInfo oque precisa ter a mais, caso n precise retorne so n"
+                " Tente criar elas com suas informações, independente do jeito que elas vieram, se REALMENTE não der(se esforce ao máximo para dar) retorne em moreInfo oque precisa ter a mais, caso n precise retorne so n"
                 f"categorias presentes que podem ser usadas: {categories}"
                 "Formato obrigatório: {\"moreInfo\": \"informacoes extras\" ou \"n\", \"products\": [{\"category\": \"categoria\", \"name\": \"nome do produto\", \"subCategory\": \"subcategoria\", \"price\": \"preco\"}]}"
                 "⚠️ Responda apenas com um JSON válido, sem texto adicional, sem explicações e sem comentários."
